@@ -1,0 +1,129 @@
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: lakehouse-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password1234
+    volumes:
+      - ./data/minio:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - lakehouse-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  postgres-metastore:
+    image: postgres:13
+    container_name: lakehouse-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: iceberg
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: password
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - lakehouse-net
+
+  spark-master:
+    image: apache/spark:3.5.0
+    container_name: lakehouse-spark-master
+    hostname: spark-master
+    user: root
+    environment:
+      - SPARK_NO_DAEMONIZE=true
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    volumes:
+      - ./src:/opt/spark/work-dir
+      - ./jars:/opt/spark/extra-jars
+      - ./conf/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    networks:
+      - lakehouse-net
+
+  spark-worker:
+    image: apache/spark:3.5.0
+    container_name: lakehouse-spark-worker
+    user: root
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_NO_DAEMONIZE=true
+      - SPARK_WORKER_CORES=1
+      - SPARK_WORKER_MEMORY=1G
+    volumes:
+      - ./src:/opt/spark/work-dir
+      - ./jars:/opt/spark/extra-jars
+      - ./conf/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    networks:
+      - lakehouse-net
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: lakehouse-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - lakehouse-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: lakehouse-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - ./data/kafka:/var/lib/kafka/data
+    networks:
+      - lakehouse-net
+
+  trino:
+    image: trinodb/trino:latest
+    container_name: lakehouse-trino
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./conf/trino:/etc/trino/catalog
+    networks:
+      - lakehouse-net
+    depends_on:
+      - minio
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: lakehouse-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_INSTALL_PLUGINS=trino-datasource
+      # - GF_AUTH_ANONYMOUS_ENABLED=true
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+    networks:
+      - lakehouse-net
+    depends_on:
+      - trino
+
+networks:
+  lakehouse-net:
+    driver: bridge

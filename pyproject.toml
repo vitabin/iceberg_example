@@ -1,0 +1,11 @@
+[project]
+name = "smartfarm-lakehouse"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "faker>=38.2.0",
+    "kafka-python>=2.3.0",
+    "pyspark>=4.0.1",
+]

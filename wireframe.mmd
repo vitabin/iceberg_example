@@ -1,0 +1,35 @@
+graph LR
+    %% 1. 생성 & 수집 (Ingestion)
+    subgraph S1["1. 생성 & 수집 (Ingestion)"]
+        A["Python 센서 시뮬레이터 (Dummy Sensor Data)"]
+        B(Kafka Broker Topic: sensor-raw)
+        A -->|JSON/Protobuf| B
+    end
+
+    %% 2. 처리 & 적재 (Processing & Storage)
+    subgraph S2["2. 처리 & 적재 (Processing & Storage)"]
+        C[Spark Streaming Engine]
+        D[(MinIO - Bronze Layer *Raw Json Files*)]
+        E[(MinIO - Silver Layer *Apache Iceberg Tables*)]
+
+        B -->|Stream Read| C
+        C -->|Raw Data 저장| D
+        C -->|1차 가공/정제| E
+    end
+
+    %% 3. 서빙 & 시각화 (Serving & Viz)
+    subgraph S3["3. 서빙 & 시각화 (Serving & Viz)"]
+        F["Trino / Presto (Query Engine)"]
+        G["Superset / Grafana (Dashboard)"]
+
+        E -->|SQL Query| F
+        F -->|Connect| G
+    end
+
+    %% 4. 관리 (Orchestration)
+    subgraph S4["4. 관리 (Orchestration)"]
+        H[Apache Airflow]
+        
+        H -.->|배치 작업 스케줄링| C
+        H -.->|테이블 최적화/Maintenance| E
+    end
