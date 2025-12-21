@@ -55,9 +55,9 @@ if __name__ == "__main__":
             
             producer.flush()
             
-            print(f"✅ Sent batch data: {len(sensor_ids)} events")
+            print(f"✅ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Sent batch data: {len(sensor_ids)} events")
             
-            time.sleep(1)
+            time.sleep(0.1)
 
     except KeyboardInterrupt:
         print("\n🛑 Stopping producer...")
